@@ -10,12 +10,12 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0"/>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.3" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.3"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\PurchaseFxConverter.Application\PurchaseFxConverter.Application.csproj" />
-      <ProjectReference Include="..\PurchaseFxConverter.Infra\PurchaseFxConverter.Infra.csproj" />
+        <ProjectReference Include="..\PurchaseFxConverter.Application\PurchaseFxConverter.Application.csproj"/>
+        <ProjectReference Include="..\PurchaseFxConverter.Infra\PurchaseFxConverter.Infra.csproj"/>
     </ItemGroup>
 
 </Project>

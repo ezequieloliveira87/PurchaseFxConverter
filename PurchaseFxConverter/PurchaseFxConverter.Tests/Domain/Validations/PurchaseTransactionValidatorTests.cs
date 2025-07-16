@@ -5,7 +5,7 @@ public class PurchaseTransactionValidatorTests
     [Test]
     public void Should_Validate_Correct_Data()
     {
-        var validator = new PurchaseTransactionValidator("Compra válida", DateTime.UtcNow, 100.00m);
+        var validator = new PurchaseTransactionValidator("Valid Shopping", DateTime.UtcNow, 100.00m);
         Assert.That(validator.IsValid);
     }
 
@@ -20,7 +20,7 @@ public class PurchaseTransactionValidatorTests
     [Test]
     public void Should_Fail_When_Amount_Is_Zero()
     {
-        var validator = new PurchaseTransactionValidator("Compra", DateTime.UtcNow, 0m);
+        var validator = new PurchaseTransactionValidator("Shopping with zero value", DateTime.UtcNow, 0m);
         Assert.That(validator.IsValid, Is.False);
     }
 
@@ -28,7 +28,7 @@ public class PurchaseTransactionValidatorTests
     public void Should_Fail_When_Date_Is_Future()
     {
         var futureDate = DateTime.UtcNow.AddDays(1);
-        var validator = new PurchaseTransactionValidator("Compra", futureDate, 100m);
+        var validator = new PurchaseTransactionValidator("Future Shopping", futureDate, 100m);
         Assert.That(validator.IsValid, Is.False);
     }
 }

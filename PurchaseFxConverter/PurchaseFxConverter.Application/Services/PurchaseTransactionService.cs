@@ -2,12 +2,12 @@ namespace PurchaseFxConverter.Application.Services;
 
 public class PurchaseTransactionService(
     IPurchaseTransactionRepository repository,
-    ICurrencyConversionService currencyService) : IPurchaseTransactionService
+    ITreasuryCurrencyConversionService treasuryCurrencyService,
+    ILogger<PurchaseTransactionService> logger) : IPurchaseTransactionService
 {
-
     public async Task<Guid> CreateAsync(CreatePurchaseTransactionRequest request)
     {
-        var transaction = new PurchaseTransaction(request.Description, request.TransactionDate, request.AmountUSD);
+        var transaction = new PurchaseTransaction(request.Description, request.TransactionDate, request.AmountUsd);
 
         if (!transaction.IsValid)
         {
@@ -16,6 +16,8 @@ public class PurchaseTransactionService(
         }
 
         await repository.SaveAsync(transaction);
+
+        logger.LogInformation(SuccessMessage.TransactionCreated.GetEnumDescription());
         return transaction.Id;
     }
 
@@ -29,25 +31,21 @@ public class PurchaseTransactionService(
     {
         var transaction = await repository.GetByIdAsync(id);
         if (transaction is null)
-            throw new InvalidOperationException("Transação não encontrada");
+            throw new InvalidOperationException(ErrorMessage.TransactionNotFound.GetEnumDescription());
 
-        if (!CurrencyCode.IsValid(targetCurrencyCode))
-            throw new ArgumentException("Código de moeda inválido");
-
-        var rate = await currencyService.GetExchangeRateAsync(targetCurrencyCode, transaction.TransactionDate);
-        if (rate is null)
-            throw new InvalidOperationException("Taxa de câmbio indisponível para essa data");
-
-        var convertedAmount = Math.Round(transaction.AmountUSD * rate.Value, 2);
+        var exchangeRate = await treasuryCurrencyService.GetExchangeRateAsync(targetCurrencyCode, transaction.TransactionDate);
+        if (exchangeRate is null)
+            throw new InvalidOperationException(ErrorMessage.ExchangeRateUnavailable.GetEnumDescription());
+        var convertedAmount = Math.Round(transaction.AmountUsd * exchangeRate.Value, 2);
 
         return new ConvertedTransactionViewModel
         {
             Id = transaction.Id,
             Description = transaction.Description,
             TransactionDate = transaction.TransactionDate,
-            OriginalAmount = transaction.AmountUSD,
+            OriginalAmount = transaction.AmountUsd,
             Currency = targetCurrencyCode.ToUpper(),
-            ExchangeRate = rate.Value,
+            ExchangeRate = exchangeRate.Value,
             ConvertedAmount = convertedAmount
         };
     }

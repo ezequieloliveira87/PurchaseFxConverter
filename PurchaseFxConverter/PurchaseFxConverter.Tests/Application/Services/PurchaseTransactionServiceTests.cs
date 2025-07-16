@@ -1,145 +1,129 @@
-using Mapster;
-using PurchaseFxConverter.Application.ViewModels;
-
 namespace PurchaseFxConverter.Tests.Application.Services;
 
+[TestFixture]
 public class PurchaseTransactionServiceTests
 {
-    private PurchaseTransactionService _service;
 
     [SetUp]
     public void Setup()
     {
-        var repo = new InMemoryPurchaseTransactionRepository();
-        var currencyService = new MockCurrencyConversionService();
-        _service = new PurchaseTransactionService(repo, currencyService);
+        _repoMock = new Mock<IPurchaseTransactionRepository>();
+        _currencyServiceMock = new Mock<ITreasuryCurrencyConversionService>();
+        _loggerMock = new Mock<ILogger<PurchaseTransactionService>>();
+
+        _service = new PurchaseTransactionService(_repoMock.Object, _currencyServiceMock.Object, _loggerMock.Object);
     }
+    private Mock<IPurchaseTransactionRepository> _repoMock;
+    private Mock<ITreasuryCurrencyConversionService> _currencyServiceMock;
+    private Mock<ILogger<PurchaseTransactionService>> _loggerMock;
+    private PurchaseTransactionService _service;
 
     [Test]
-    public async Task Should_Create_Transaction_With_Valid_Data()
+    public async Task CreateAsync_WithValidTransaction_ShouldReturnId_AndLogInfo()
     {
+        // Arrange
         var request = new CreatePurchaseTransactionRequest
         {
-            Description = "Compra válida",
-            TransactionDate = DateTime.UtcNow,
-            AmountUSD = 100m
+            Description = "Compra Teste",
+            AmountUsd = 100,
+            TransactionDate = DateTime.UtcNow
         };
 
+        // Act
         var id = await _service.CreateAsync(request);
 
+        // Assert
         Assert.That(id, Is.Not.EqualTo(Guid.Empty));
+        _repoMock.Verify(expression: r => r.SaveAsync(It.IsAny<PurchaseTransaction>()), Times.Once);
+
+        _loggerMock.Verify(
+            expression: x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains(SuccessMessage.TransactionCreated.GetEnumDescription())),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     [Test]
-    public void Should_Throw_When_Creating_Invalid_Transaction()
+    public void CreateAsync_WithInvalidTransaction_ShouldThrowArgumentException()
     {
+        // Arrange
         var request = new CreatePurchaseTransactionRequest
         {
-            Description = "", // inválido
-            TransactionDate = DateTime.UtcNow.AddDays(1), // no futuro
-            AmountUSD = 0
+            Description = "",// inválido
+            AmountUsd = 0,
+            TransactionDate = DateTime.UtcNow.AddDays(1)// futuro
         };
 
-        Assert.That(() => _service.CreateAsync(request),
-            Throws.ArgumentException.With.Message.Contain("Transação inválida"));
+        // Act + Assert
+        var ex = Assert.ThrowsAsync<ArgumentException>(() => _service.CreateAsync(request));
+        Assert.That(ex!.Message, Does.Contain("A descrição é obrigatória"));
     }
 
     [Test]
-    public async Task Should_Return_Transaction_When_Found()
+    public async Task GetByIdAsync_WhenTransactionExists_ShouldReturnViewModel()
     {
-        var request = new CreatePurchaseTransactionRequest
-        {
-            Description = "Compra X",
-            TransactionDate = DateTime.UtcNow,
-            AmountUSD = 50m
-        };
+        // Arrange
+        var transaction = new PurchaseTransaction("Compra", DateTime.UtcNow, 123);
+        _repoMock.Setup(r => r.GetByIdAsync(transaction.Id)).ReturnsAsync(transaction);
 
-        var id = await _service.CreateAsync(request);
-        var result = await _service.GetByIdAsync(id);
+        // Act
+        var result = await _service.GetByIdAsync(transaction.Id);
 
+        // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result?.Description, Is.EqualTo("Compra X"));
+        Assert.That(result?.Description, Is.EqualTo("Compra"));
     }
 
     [Test]
-    public async Task Should_Return_Null_When_Transaction_Not_Found()
+    public async Task GetByIdAsync_WhenTransactionDoesNotExist_ShouldReturnNull()
     {
+        _repoMock.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((PurchaseTransaction)null!);
+
         var result = await _service.GetByIdAsync(Guid.NewGuid());
+
         Assert.That(result, Is.Null);
     }
 
     [Test]
-    public async Task Should_Convert_Transaction_With_Valid_Currency()
+    public void ConvertTransactionAsync_WhenTransactionNotFound_ShouldThrow()
     {
-        var request = new CreatePurchaseTransactionRequest
-        {
-            Description = "Compra Y",
-            TransactionDate = DateTime.UtcNow,
-            AmountUSD = 10m
-        };
+        _repoMock.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((PurchaseTransaction)null!);
 
-        var id = await _service.CreateAsync(request);
-        var result = await _service.ConvertTransactionAsync(id, "EUR");
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ConvertTransactionAsync(Guid.NewGuid(), "EUR"));
 
-        Assert.That(result.ConvertedAmount, Is.GreaterThan(0));
+        Assert.That(ex!.Message, Does.Contain(ErrorMessage.TransactionNotFound.GetEnumDescription()));
+    }
+
+    [Test]
+    public async Task ConvertTransactionAsync_WhenRateIsNull_ShouldThrow()
+    {
+        var transaction = new PurchaseTransaction("Compra", DateTime.UtcNow, 50);
+        _repoMock.Setup(r => r.GetByIdAsync(transaction.Id)).ReturnsAsync(transaction);
+        _currencyServiceMock.Setup(s => s.GetExchangeRateAsync("EUR", transaction.TransactionDate))
+            .ReturnsAsync((decimal?)null);
+
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ConvertTransactionAsync(transaction.Id, "EUR"));
+
+        Assert.That(ex!.Message, Does.Contain(ErrorMessage.ExchangeRateUnavailable.GetEnumDescription()));
+    }
+
+    [Test]
+    public async Task ConvertTransactionAsync_WithValidRate_ShouldReturnConvertedViewModel()
+    {
+        var transaction = new PurchaseTransaction("Compra OK", DateTime.UtcNow, 100);
+        _repoMock.Setup(r => r.GetByIdAsync(transaction.Id)).ReturnsAsync(transaction);
+        _currencyServiceMock.Setup(s => s.GetExchangeRateAsync("EUR", transaction.TransactionDate))
+            .ReturnsAsync(5.4321m);
+
+        var result = await _service.ConvertTransactionAsync(transaction.Id, "EUR");
+
         Assert.That(result.Currency, Is.EqualTo("EUR"));
-    }
-
-    [Test]
-    public async Task Should_Throw_When_Currency_Is_Invalid()
-    {
-        // Arrange: cria uma transação real
-        var request = new CreatePurchaseTransactionRequest
-        {
-            Description = "Compra Teste",
-            TransactionDate = DateTime.UtcNow,
-            AmountUSD = 100m
-        };
-
-        var id = await _service.CreateAsync(request);
-
-        // Act + Assert
-        var ex = Assert.ThrowsAsync<ArgumentException>(() =>
-            _service.ConvertTransactionAsync(id, "ZZZ")); // moeda inválida
-
-        Assert.That(ex!.Message, Does.Contain("Código de moeda inválido"));
-    }
-
-    [Test]
-    public void Should_Throw_When_Transaction_Not_Found()
-    {
-        var ex = Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service.ConvertTransactionAsync(Guid.NewGuid(), "USD"));
-
-        Assert.That(ex!.Message, Does.Contain("Transação não encontrada"));
-    }
-
-    [Test]
-    public async Task Should_Throw_When_Rate_Is_Null()
-    {
-        var customService = new PurchaseTransactionService(
-            new InMemoryPurchaseTransactionRepository(),
-            new EmptyCurrencyConversionService());
-
-        var request = new CreatePurchaseTransactionRequest
-        {
-            Description = "Compra sem taxa",
-            TransactionDate = DateTime.UtcNow,
-            AmountUSD = 10
-        };
-
-        var id = await customService.CreateAsync(request);
-
-        var ex = Assert.ThrowsAsync<InvalidOperationException>(() =>
-            customService.ConvertTransactionAsync(id, "EUR")); // moeda válida
-
-        Assert.That(ex!.Message, Does.Contain("Taxa de câmbio indisponível"));
-    }
-    
-    // Mock que retorna null para qualquer taxa
-    private class EmptyCurrencyConversionService : ICurrencyConversionService
-    {
-        public Task<decimal?> GetExchangeRateAsync(string targetCurrencyCode, DateTime referenceDate)
-            => Task.FromResult<decimal?>(null);
+        Assert.That(result.ExchangeRate, Is.EqualTo(5.4321m));
+        Assert.That(result.ConvertedAmount, Is.EqualTo(543.21m));
     }
 }

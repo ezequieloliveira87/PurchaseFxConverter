@@ -1,37 +1,30 @@
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-
-builder.Services.Configure<ApiBehaviorOptions>(options =>
-{
-    options.InvalidModelStateResponseFactory = context =>
-    {
-        var erros = context.ModelState
+builder.Services.Configure<ApiBehaviorOptions>(options => {
+    options.InvalidModelStateResponseFactory = context => {
+        var errors = context.ModelState
             .Where(e => e.Key != "request" && e.Value?.Errors.Count > 0)
             .Select(e => new
             {
                 campo = Regex.Replace(e.Key, @"^(\$\.|request\.?)", ""),
                 mensagens = e.Value!.Errors.Select(err =>
                     string.IsNullOrWhiteSpace(err.ErrorMessage)
-                        ? "Valor inválido ou mal formatado."
+                        ? "The value is invalid or has an incorrect format."
                         : err.ErrorMessage)
             });
 
-        return new BadRequestObjectResult(new { erros });
+        return new BadRequestObjectResult(new
+        {
+            errors
+        });
     };
 });
 
+builder.Services.AddSwaggerConfiguration();
+builder.Services.AddProjectDependencies();
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// Mapster config
 MapsterConfig.RegisterMappings();
-
-// Dependency injection
-builder.Services.AddScoped<IPurchaseTransactionService, PurchaseTransactionService>();
-builder.Services.AddSingleton<IPurchaseTransactionRepository, InMemoryPurchaseTransactionRepository>();
-builder.Services.AddSingleton<ICurrencyConversionService, MockCurrencyConversionService>();
 
 var app = builder.Build();
 
@@ -45,4 +38,4 @@ app.UseHttpsRedirection();
 app.MapControllers();
 app.Run();
 
-public partial class Program { }
+public abstract partial class Program;

@@ -1,8 +1,10 @@
 global using Mapster;
+global using Microsoft.Extensions.Logging;
 global using PurchaseFxConverter.Application.DTOs;
 global using PurchaseFxConverter.Application.Interfaces;
 global using PurchaseFxConverter.Application.ViewModels;
 global using PurchaseFxConverter.Domain.Entities;
+global using PurchaseFxConverter.Domain.Enums.Messages;
+global using PurchaseFxConverter.Domain.Extensions;
 global using PurchaseFxConverter.Domain.Interfaces.Repositories;
 global using PurchaseFxConverter.Domain.Interfaces.Services;
-global using PurchaseFxConverter.Domain.ValueObjects;

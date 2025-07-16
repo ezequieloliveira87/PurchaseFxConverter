@@ -1,14 +1,14 @@
 namespace PurchaseFxConverter.Application.Mappings;
 
-public class MapsterConfig
+public abstract class MapsterConfig
 {
     public static void RegisterMappings()
     {
         TypeAdapterConfig<PurchaseTransaction, PurchaseTransactionViewModel>
             .NewConfig()
-            .Map(dest => dest.Id, src => src.Id)
-            .Map(dest => dest.Description, src => src.Description)
-            .Map(dest => dest.TransactionDate, src => src.TransactionDate)
-            .Map(dest => dest.AmountUSD, src => src.AmountUSD);
+            .Map(member: dest => dest.Id, source: src => src.Id)
+            .Map(member: dest => dest.Description, source: src => src.Description)
+            .Map(member: dest => dest.TransactionDate, source: src => src.TransactionDate)
+            .Map(member: dest => dest.AmountUsd, source: src => src.AmountUsd);
     }
 }

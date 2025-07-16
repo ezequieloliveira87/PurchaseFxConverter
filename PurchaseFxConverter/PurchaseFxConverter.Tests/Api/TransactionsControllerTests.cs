@@ -1,125 +1,168 @@
-using System.Net;
-using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.VisualStudio.TestPlatform.TestHost;
-using NUnit.Framework;
-using PurchaseFxConverter.API;
-using PurchaseFxConverter.Application.DTOs;
-
 namespace PurchaseFxConverter.Tests.Api;
 
+[TestFixture]
 public class TransactionsControllerTests
+{
+    [SetUp]
+    public void SetUp()
     {
-        private WebApplicationFactory<Program> _factory = null!;
-        private HttpClient _client = null!;
-
-        [SetUp]
-        public void Setup()
-        {
-            _factory = new WebApplicationFactory<Program>();
-            _client = _factory.CreateClient();
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            _client?.Dispose();
-            _factory?.Dispose();
-        }
-
-        [Test]
-        public async Task POST_Should_Create_Transaction()
-        {
-            var request = new CreatePurchaseTransactionRequest
-            {
-                Description = "Compra via API",
-                TransactionDate = DateTime.UtcNow,
-                AmountUSD = 120.50m
-            };
-
-            var response = await _client.PostAsJsonAsync("/api/transactions", request);
-
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
-
-            var content = await response.Content.ReadFromJsonAsync<Dictionary<string, Guid>>();
-            Assert.That(content, Is.Not.Null);
-            Assert.That(content!.ContainsKey("id"), Is.True);
-        }
-
-        [Test]
-        public async Task GET_Should_Return_Transaction_When_Exists()
-        {
-            // Cria transação primeiro
-            var request = new CreatePurchaseTransactionRequest
-            {
-                Description = "API Read",
-                TransactionDate = DateTime.UtcNow,
-                AmountUSD = 75.00m
-            };
-
-            var post = await _client.PostAsJsonAsync("/api/transactions", request);
-            var body = await post.Content.ReadFromJsonAsync<Dictionary<string, Guid>>();
-            var id = body!["id"];
-
-            // Faz GET
-            var get = await _client.GetAsync($"/api/transactions/{id}");
-
-            Assert.That(get.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        }
-
-        [Test]
-        public async Task GET_Should_Return_NotFound_When_Transaction_Not_Exists()
-        {
-            var get = await _client.GetAsync($"/api/transactions/{Guid.NewGuid()}");
-            Assert.That(get.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-        }
-        
-        [Test]
-        public async Task Convert_Should_Return_Ok_When_Successful()
-        {
-            // Arrange
-            var create = new CreatePurchaseTransactionRequest
-            {
-                Description = "Conversão OK",
-                TransactionDate = DateTime.UtcNow,
-                AmountUSD = 100
-            };
-
-            var post = await _client.PostAsJsonAsync("/api/transactions", create);
-            var body = await post.Content.ReadFromJsonAsync<Dictionary<string, Guid>>();
-            var id = body!["id"];
-
-            // Act
-            var response = await _client.GetAsync($"/api/transactions/{id}/convert?currency=EUR");
-
-            // Assert
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        }
-
-        [Test]
-        public async Task Convert_Should_Return_BadRequest_When_Currency_Is_Invalid()
-        {
-            var create = new CreatePurchaseTransactionRequest
-            {
-                Description = "Moeda inválida",
-                TransactionDate = DateTime.UtcNow,
-                AmountUSD = 50
-            };
-
-            var post = await _client.PostAsJsonAsync("/api/transactions", create);
-            var body = await post.Content.ReadFromJsonAsync<Dictionary<string, Guid>>();
-            var id = body!["id"];
-
-            var response = await _client.GetAsync($"/api/transactions/{id}/convert?currency=ZZZ");
-
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        }
-
-        [Test]
-        public async Task Convert_Should_Return_NotFound_When_Transaction_Not_Found()
-        {
-            var response = await _client.GetAsync($"/api/transactions/{Guid.NewGuid()}/convert?currency=EUR");
-
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-        }
+        _serviceMock = new Mock<IPurchaseTransactionService>();
+        _controller = new TransactionsController(_serviceMock.Object);
     }
+    private Mock<IPurchaseTransactionService> _serviceMock;
+    private TransactionsController _controller;
+
+    [Test]
+    public async Task Create_ShouldReturnCreated_WhenValidRequest()
+    {
+        var request = new CreatePurchaseTransactionRequest
+        {
+            Description = "Teste",
+            TransactionDate = DateTime.UtcNow,
+            AmountUsd = 100
+        };
+
+        var generatedId = Guid.NewGuid();
+
+        _serviceMock
+            .Setup(s => s.CreateAsync(request))
+            .ReturnsAsync(generatedId);
+
+        var result = await _controller.Create(request) as CreatedAtActionResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.ActionName, Is.EqualTo(nameof(TransactionsController.GetById)));
+
+        var value = result.Value;
+        var property = value!.GetType().GetProperty("id");
+        var id = property?.GetValue(value);
+
+        Assert.That(id, Is.EqualTo(generatedId));
+    }
+
+    [Test]
+    public async Task Create_ShouldReturnBadRequest_WhenArgumentException()
+    {
+        var request = new CreatePurchaseTransactionRequest();
+        var expectedMessage = "Invalid";
+
+        _serviceMock
+            .Setup(s => s.CreateAsync(request))
+            .ThrowsAsync(new ArgumentException(expectedMessage));
+
+        var result = await _controller.Create(request) as BadRequestObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+
+        var value = result!.Value;
+        var property = value!.GetType().GetProperty("error");
+        var errorMessage = property?.GetValue(value) as string;
+
+        Assert.That(errorMessage, Is.EqualTo(expectedMessage));
+    }
+
+    [Test]
+    public async Task GetById_ShouldReturnOk_WhenTransactionExists()
+    {
+        var id = Guid.NewGuid();
+        var transaction = new PurchaseTransactionViewModel
+        {
+            Id = id,
+            Description = "Transaction Test",
+            TransactionDate = DateTime.UtcNow,
+            AmountUsd = 100
+        };
+
+        _serviceMock
+            .Setup(s => s.GetByIdAsync(id))
+            .ReturnsAsync(transaction);
+
+        var result = await _controller.GetById(id);
+
+        var okResult = result.Result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
+
+        var returnedModel = okResult!.Value as PurchaseTransactionViewModel;
+        Assert.That(returnedModel, Is.Not.Null);
+        Assert.That(returnedModel!.Id, Is.EqualTo(id));
+    }
+
+    [Test]
+    public async Task GetById_ShouldReturnNotFound_WhenTransactionIsNull()
+    {
+        var id = Guid.NewGuid();
+
+        _serviceMock
+            .Setup(s => s.GetByIdAsync(id))
+            .ReturnsAsync((PurchaseTransactionViewModel?)null);
+
+        var result = await _controller.GetById(id);
+        Assert.That(result.Result, Is.InstanceOf<NotFoundResult>());
+    }
+
+    [Test]
+    public async Task Convert_ShouldReturnOk_WhenConversionSuccessful()
+    {
+        var id = Guid.NewGuid();
+        var converted = new ConvertedTransactionViewModel
+        {
+            Id = id,
+            Currency = "Brazil-Real",
+            ConvertedAmount = 500,
+            ExchangeRate = 5
+        };
+
+        _serviceMock
+            .Setup(s => s.ConvertTransactionAsync(id, "Brazil-Real"))
+            .ReturnsAsync(converted);
+
+        var result = await _controller.Convert(id, "Brazil-Real") as OkObjectResult;
+        var value = result!.Value as ConvertedTransactionViewModel;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(value, Is.Not.Null);
+        Assert.That(value!.Currency, Is.EqualTo("Brazil-Real"));
+    }
+
+    [Test]
+    public async Task Convert_ShouldReturnBadRequest_WhenArgumentException()
+    {
+        var id = Guid.NewGuid();
+        var expectedMessage = "Invalid currency code";
+
+        _serviceMock
+            .Setup(s => s.ConvertTransactionAsync(id, "Brazil-Real"))
+            .ThrowsAsync(new ArgumentException(expectedMessage));
+
+        var result = await _controller.Convert(id, "Brazil-Real") as BadRequestObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+
+        var value = result!.Value;
+        var property = value!.GetType().GetProperty("error");
+        var errorMessage = property?.GetValue(value) as string;
+
+        Assert.That(errorMessage, Is.EqualTo(expectedMessage));
+    }
+
+    [Test]
+    public async Task Convert_ShouldReturnNotFound_WhenInvalidOperationException()
+    {
+        var id = Guid.NewGuid();
+        var expectedMessage = "Transaction not found";
+
+        _serviceMock
+            .Setup(s => s.ConvertTransactionAsync(id, "Brazil-Real"))
+            .ThrowsAsync(new InvalidOperationException(expectedMessage));
+
+        var result = await _controller.Convert(id, "Brazil-Real") as NotFoundObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+
+        var value = result!.Value;
+        var property = value!.GetType().GetProperty("error");
+        var errorMessage = property?.GetValue(value) as string;
+
+        Assert.That(errorMessage, Is.EqualTo(expectedMessage));
+    }
+}

@@ -7,11 +7,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Mapster" Version="7.4.0" />
+        <PackageReference Include="Mapster" Version="7.4.0"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.7"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\PurchaseFxConverter.Domain\PurchaseFxConverter.Domain.csproj" />
+        <ProjectReference Include="..\PurchaseFxConverter.Domain\PurchaseFxConverter.Domain.csproj"/>
     </ItemGroup>
 
 </Project>

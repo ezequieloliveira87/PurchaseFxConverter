@@ -1,3 +1,11 @@
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.Logging;
 global using PurchaseFxConverter.Domain.Entities;
+global using PurchaseFxConverter.Domain.Enums.Messages;
+global using PurchaseFxConverter.Domain.Extensions;
+global using PurchaseFxConverter.Infra.DTOs;
 global using PurchaseFxConverter.Domain.Interfaces.Repositories;
 global using PurchaseFxConverter.Domain.Interfaces.Services;
+global using System.Globalization;
+global using System.Net.Http;
+global using System.Text.Json;
