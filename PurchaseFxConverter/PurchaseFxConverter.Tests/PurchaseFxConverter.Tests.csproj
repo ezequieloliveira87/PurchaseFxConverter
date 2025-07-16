@@ -6,10 +6,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <PreserveCompilationContext>true</PreserveCompilationContext>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="coverlet.collector" Version="6.0.2"/>
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.7" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1"/>
         <PackageReference Include="NUnit" Version="4.2.2"/>
         <PackageReference Include="NUnit.Analyzers" Version="4.3.0"/>
@@ -21,6 +24,8 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\PurchaseFxConverter.Api\PurchaseFxConverter.Api.csproj" />
+      <ProjectReference Include="..\PurchaseFxConverter.Application\PurchaseFxConverter.Application.csproj" />
       <ProjectReference Include="..\PurchaseFxConverter.Domain\PurchaseFxConverter.Domain.csproj" />
       <ProjectReference Include="..\PurchaseFxConverter.Infra\PurchaseFxConverter.Infra.csproj" />
     </ItemGroup>

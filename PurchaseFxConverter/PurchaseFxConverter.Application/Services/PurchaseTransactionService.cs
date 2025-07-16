@@ -1,43 +1,54 @@
-using PurchaseFxConverter.Application.Interfaces;
-
 namespace PurchaseFxConverter.Application.Services;
 
-public class PurchaseTransactionService : IPurchaseTransactionService
+public class PurchaseTransactionService(
+    IPurchaseTransactionRepository repository,
+    ICurrencyConversionService currencyService) : IPurchaseTransactionService
 {
-    private readonly IPurchaseTransactionService _service;
-
-    public PurchaseTransactionService(IPurchaseTransactionService service)
-    {
-        _service = service;
-    }
 
     public async Task<Guid> CreateAsync(CreatePurchaseTransactionRequest request)
     {
-        var transaction = new PurchaseTransactionViewModel(
-            request.Description,
-            request.TransactionDate,
-            request.AmountUSD
-        );
+        var transaction = new PurchaseTransaction(request.Description, request.TransactionDate, request.AmountUSD);
 
         if (!transaction.IsValid)
-            throw new ArgumentException("Transação inválida", nameof(request));
+        {
+            var errors = string.Join("; ", transaction.Notifications.Select(n => n.Message));
+            throw new ArgumentException(errors);
+        }
 
-        await _service.SaveAsync(transaction);
+        await repository.SaveAsync(transaction);
         return transaction.Id;
     }
 
     public async Task<PurchaseTransactionViewModel?> GetByIdAsync(Guid id)
     {
-        var transaction = await _service.GetByIdAsync(id);
-        if (transaction is null) return null;
+        var transaction = await repository.GetByIdAsync(id);
+        return transaction?.Adapt<PurchaseTransactionViewModel>();
+    }
 
-        return new PurchaseTransactionViewModel
+    public async Task<ConvertedTransactionViewModel> ConvertTransactionAsync(Guid id, string targetCurrencyCode)
+    {
+        var transaction = await repository.GetByIdAsync(id);
+        if (transaction is null)
+            throw new InvalidOperationException("Transação não encontrada");
+
+        if (!CurrencyCode.IsValid(targetCurrencyCode))
+            throw new ArgumentException("Código de moeda inválido");
+
+        var rate = await currencyService.GetExchangeRateAsync(targetCurrencyCode, transaction.TransactionDate);
+        if (rate is null)
+            throw new InvalidOperationException("Taxa de câmbio indisponível para essa data");
+
+        var convertedAmount = Math.Round(transaction.AmountUSD * rate.Value, 2);
+
+        return new ConvertedTransactionViewModel
         {
             Id = transaction.Id,
             Description = transaction.Description,
             TransactionDate = transaction.TransactionDate,
-            AmountUSD = transaction.AmountUSD,
-            CreatedAt = transaction.CreatedAt
+            OriginalAmount = transaction.AmountUSD,
+            Currency = targetCurrencyCode.ToUpper(),
+            ExchangeRate = rate.Value,
+            ConvertedAmount = convertedAmount
         };
     }
 }

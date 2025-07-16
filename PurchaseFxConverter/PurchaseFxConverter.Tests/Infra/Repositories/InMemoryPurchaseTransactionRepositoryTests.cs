@@ -5,15 +5,12 @@ public class InMemoryPurchaseTransactionRepositoryTests
     [Test]
     public async Task Should_Save_And_Retrieve_Transaction()
     {
-        // Arrange
         var repo = new InMemoryPurchaseTransactionRepository();
         var transaction = new PurchaseTransaction("Teste", DateTime.UtcNow, 150.00m);
 
-        // Act
         await repo.SaveAsync(transaction);
         var result = await repo.GetByIdAsync(transaction.Id);
 
-        // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.Id, Is.EqualTo(transaction.Id));
     }
